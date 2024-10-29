@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select State with Search</title>
+    <style>
+        /* Styling for the container and search bar */
+        .container {
+    width: 100%;
+    height: 100%; /* Make sure the container fills the available height */
+    margin: 0;
+    font-family: Arial, sans-serif;
+    position: relative;
+    background-color: #f2f2f2; /* Light gray background color */
+    padding: 10px; /* Adds inner spacing */
+    border-radius: 8px; /* Rounds corners */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Adds a subtle shadow */
+    z-index: 1; /* Ensures it appears above other elements */
+    box-sizing: border-box; /* Ensures padding doesn’t affect width */
+}
+
+
+        .search-bar {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 2px;
+            
+            box-sizing: border-box;
+        }
+        select {
+            width: 100%;
+            padding: 2px;
+            box-sizing: border-box;
+        }
+        /* Loader styling */
+        #loader {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.2em;
+        }
+        .modal {
+    background-color: transparent;
+}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="loader">Loading...</div>
+        <input type="text" id="searchBar" class="search-bar" placeholder="Search for a city" onkeyup="filterCities()">
+        <select id="citySelect">
+            <option value="">Select a city</option>
+        </select>
+    </div>
+
+    <script>
+        // Show loader
+        function showLoader() {
+            document.getElementById("loader").style.display = "block";
+        }
+
+        // Hide loader
+        function hideLoader() {
+            document.getElementById("loader").style.display = "none";
+        }
+
+
+  // Zoho Embedded App initialization
+  ZOHO.embeddedApp.on("PageLoad", function (data) {
+            const id = data.EntityId;
+            const module = data.Entity;
+
+         
+            // Fetch cities and show loader
+            showLoader();
+            fetchCities();
+        });
+
+
+
+
+
+
+        // Fetch data from API and populate the dropdown
+        async function fetchCities() {
+            try {
+                const response = await fetch("https://data.gov.il/api/action/datastore_search?resource_id=b7cf8f14-64a2-4b33-8d4b-edb286fdbd37&limit=1500");
+                const data = await response.json();
+
+                if (data.success) {
+                    const records = data.result.records;
+                    const citySelect = document.getElementById("citySelect");
+                    
+                    // Clear existing options
+                    citySelect.innerHTML = '<option value="">Select a city</option>';
+
+                    // Populate dropdown with city names
+                    records.forEach(record => {
+                        const cityName = record["שם_ישוב"]; // Hebrew field name for city
+                        const option = document.createElement("option");
+                        option.value = cityName;
+                        option.textContent = cityName;
+                        citySelect.appendChild(option);
+                    });
+                } else {
+                    console.error("API request failed.");
+                }
+            } catch (error) {
+                console.error("Error fetching cities:", error);
+            } finally {
+                // Hide loader once data is loaded
+                hideLoader();
+            }
+        }
+
+        // Filter cities based on search input
+        function filterCities() {
+            const searchBar = document.getElementById("searchBar");
+            const filter = searchBar.value.toLowerCase();
+            const citySelect = document.getElementById("citySelect");
+            
+            for (const option of citySelect.options) {
+                const txtValue = option.textContent || option.innerText;
+                option.style.display = txtValue.toLowerCase().includes(filter) ? "" : "none";
+            }
+        }
+
+      
+        // Initialize Zoho Embedded App
+        ZOHO.embeddedApp.init();
+    </script>
+</body>
+</html>

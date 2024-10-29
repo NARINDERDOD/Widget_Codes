@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <script src="https://live.zwidgets.com/js-sdk/1.1/ZohoEmbededAppSDK.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+    <style>
+    /* General Styles */
+    body {
+        font-family: 'Open Sans', Arial, sans-serif;
+        background-color: #f4f6f9;
+        padding: 0;
+        margin: 0;
+        color: #333;
+    }
+
+    /* Header Styling */
+    h2 {
+        font-size: 1.25rem;
+        color: #ffffff;
+        margin: 0;
+        padding: 15px 20px;
+        background-color: #81855C;
+        border-bottom: 1px solid #D1D7C3;
+    }
+
+    /* Table Container */
+    .table-container {
+        margin: 20px auto;
+        background-color: #ffffff;
+        border: 1px solid #D1D7C3;
+        border-radius: 5px;
+        width: 95%;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Table Styling */
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        background-color: white;
+    }
+
+    th, td {
+        padding: 10px;
+        border: 1px solid #D1D7C3;
+        color: #333;
+        text-align: left;
+        position: relative;
+    }
+
+    th {
+        background-color: #F4F6F9;
+        font-weight: 600;
+    }
+
+    /* Remove underline from links and keep color unchanged */
+    a {
+        text-decoration: none;
+        color: inherit;
+    }
+
+    /* Loader styles */
+    .loader-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 200px;
+    }
+
+    .loader {
+        border: 8px solid #f3f3f3;
+        border-radius: 50%;
+        border-top: 8px solid #D3AB71;
+        width: 60px;
+        height: 60px;
+        animation: spin 2s linear infinite;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    /* Sales Order Notification Style */
+    .notification {
+        display: inline-block;
+    }
+
+    .badge {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        padding: 4px 8px;
+        border-radius: 5px;
+        background-color: #81855C;
+        color: white;
+        font-size: 0.60rem;
+        font-weight: bold;
+    }
+    </style>
+</head>
+<body>
+    <h2>Product: <span id="productName"></span></h2>
+
+    <!-- Loader Container -->
+    <div id="loaderContainer" class="loader-container">
+        <div class="loader" id="loader"></div>
+    </div>
+
+    <!-- Table to display records -->
+    <div class="table-container">
+        <table id="waitingListTable">
+            <thead>
+                <tr>
+                    <th>Deal Name</th>
+                    <th>Deal Stage</th>
+                    <th>Customer Name</th>
+                    <th>Deals ID</th>
+                </tr>
+            </thead>
+            <tbody id="waitingListRecords">
+                <!-- Records will be inserted here -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // Show loader before fetching data
+        function showLoader() {
+            $('#loaderContainer').show(); // Show loader
+            $('#waitingListTable').hide(); // Hide table
+        }
+
+        // Hide loader after fetching data
+        function hideLoader() {
+            $('#loaderContainer').hide(); // Hide loader
+            $('#waitingListTable').show(); // Show table
+        }
+
+        ZOHO.embeddedApp.on("PageLoad", function (data) {
+            var id = data.EntityId, module = data.Entity;
+            ZOHO.CRM.UI.Resize({height:"600",width:"1000"}).then(function(data){
+                console.log(data);
+            });
+            showLoader();
+
+            // Fetch the Product Record
+            ZOHO.CRM.API.getRecord({ Entity: module, RecordID: id })
+            .then(function(response){
+                console.log("Record Data:", response);
+                
+                if (response.data && response.data.length > 0) {
+                    var productName = response.data[0].Product_Name;
+                    document.getElementById('productName').innerText = productName;
+                    searchWaitingListRecords(productName);
+                } else {
+                    console.log("No record data found.");
+                    hideLoader(); // Hide loader if no data is found
+                }
+            }).catch(function(error) {
+                console.log("Error fetching product data: ", error);
+                hideLoader();
+            });
+        });
+
+        // Fetch records from the Waiting List module using search criteria
+        function searchWaitingListRecords(productName) {
+            ZOHO.CRM.API.searchRecord({
+                Entity: "Waiting_List",  
+                Type: "criteria",
+                Query: `(Name:equals:${productName})`
+            })
+            .then(function(response) {
+                console.log("Search Data:", response);
+                if (response.data && response.data.length > 0) {
+                    var records = response.data;
+                    
+                    // Fetch related sales orders for each record
+                    fetchSalesOrdersForRecords(records);
+                } else {
+                    document.getElementById('waitingListRecords').innerHTML = '<tr><td colspan="4">No records found.</td></tr>';
+                    hideLoader();
+                }
+            })
+            .catch(function(error) {
+                console.log("Error fetching records: ", error);
+                hideLoader();
+            });
+        }
+
+        // Fetch sales orders for each deal and display them
+        function fetchSalesOrdersForRecords(records) {
+            var recordsWithSalesOrders = [];
+            var recordsWithoutSalesOrders = [];
+            var fetchCount = 0;
+
+            records.forEach(function(record) {
+                var dealID = record.Deals ? record.Deals.id : null;
+                if (dealID) {
+                    ZOHO.CRM.API.getRelatedRecords({
+                        Entity: "Deals", 
+                        RecordID: dealID, 
+                        RelatedList: "SalesOrders", 
+                        page: 1, 
+                        per_page: 200
+                    })
+                    .then(function(response) {
+                        fetchCount++;
+                        if (response.data && response.data.length > 0) {
+                            record.hasSalesOrder = true;
+                            record.salesOrderCount = response.data.length; // Store the number of sales orders
+                            recordsWithSalesOrders.push(record);
+                        } else {
+                            record.hasSalesOrder = false;
+                            recordsWithoutSalesOrders.push(record);
+                        }
+
+                        // If all related records have been fetched, display results
+                        if (fetchCount === records.length) {
+                            displayRecords(recordsWithSalesOrders, recordsWithoutSalesOrders);
+                            hideLoader();
+                        }
+                    })
+                    .catch(function(error) {
+                        console.log("Error fetching related sales orders: ", error);
+                        fetchCount++;
+                        recordsWithoutSalesOrders.push(record);
+
+                        // If all related records have been fetched, display results
+                        if (fetchCount === records.length) {
+                            displayRecords(recordsWithSalesOrders, recordsWithoutSalesOrders);
+                            hideLoader();
+                        }
+                    });
+                } else {
+                    fetchCount++;
+                    recordsWithoutSalesOrders.push(record);
+
+                    // If all related records have been fetched, display results
+                    if (fetchCount === records.length) {
+                        displayRecords(recordsWithSalesOrders, recordsWithoutSalesOrders);
+                        hideLoader();
+                    }
+                }
+            });
+        }
+
+        // Display records in the table
+        function displayRecords(recordsWithOrders, recordsWithoutOrders) {
+            var tbody = document.getElementById('waitingListRecords');
+            tbody.innerHTML = '';
+
+            // Add records with sales orders at the top
+            recordsWithOrders.forEach(function(record) {
+                tbody.innerHTML += generateTableRow(record, true, record.salesOrderCount);
+            });
+
+            // Add records without sales orders at the bottom
+            recordsWithoutOrders.forEach(function(record) {
+                tbody.innerHTML += generateTableRow(record, false, 0);
+            });
+        }
+
+        // Generate a table row for a given record
+        function generateTableRow(record, hasSalesOrder, salesOrderCount) {
+            var dealName = record.Deals ? record.Deals.name : "N/A";
+            var dealStage = record.Stage || "N/A";
+            var customerName = record.Contact ? record.Contact.name : "N/A";
+            var dealID = record.Deals ? record.Deals.id : "N/A";
+            var dealLink = `https://crm.zoho.com/crm/org702296421/tab/Potentials/${dealID}`;
+
+            var salesOrderTag = hasSalesOrder ? `<span class="notification"><a href="${dealLink}" target="_blank">${dealName}</a><span class="badge">${salesOrderCount}</span></span>` : `<a href="${dealLink}" target="_blank">${dealName}</a>`;
+
+            return `<tr>
+                        <td>${salesOrderTag}</td>
+                        <td><a href="${dealLink}" target="_blank">${dealStage}</a></td>
+                        <td><a href="${dealLink}" target="_blank">${customerName}</a></td>
+                        <td><a href="${dealLink}" target="_blank">${dealID}</a></td>
+                    </tr>`;
+        }
+
+        // Initialize the widget
+        ZOHO.embeddedApp.init();
+    </script>
+</body>
+</html>
